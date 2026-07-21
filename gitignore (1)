@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+venv/
+env/
+.vscode/
+.idea/
+*.h5
+*.pt
+*.pth
+outputs/*
+data/*
+!data/README.md
