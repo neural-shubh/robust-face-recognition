@@ -1,115 +1,84 @@
-# 🥷 The Disguise-Resistant Face & Person Identifier
+# Disguise-Resistant Face & Person Identifier
 
-An advanced, two-tier AI-powered computer vision pipeline designed for robust person identification and tracking under severe facial occlusions (sunglasses, caps, masks, and turned-away poses). 
+A two-tier identification pipeline that stays robust when faces are partially or fully occluded (sunglasses, masks, caps, turned-away poses). When a face is visible and detectable, it identifies people using face recognition. When it isn't, it falls back to person re-identification based on appearance (clothing, build, posture).
 
----
+## Why two tiers?
 
-## 🚀 Why Two Tiers?
+Face recognition alone breaks down the moment a face is disguised or hidden. Rather than trying to force a single model to be robust to every occlusion case, this project splits identification into two independent branches and picks whichever one has usable signal:
 
-Standard facial recognition systems instantly break down the moment a face is disguised, masked, or hidden. Rather than forcing a single model to handle impossible occlusion cases, this project splits identification into two intelligent, complementary branches:
+1. **Face branch** — YOLOv8n-face detects a face within a person's bounding box; if found with sufficient confidence, an ArcFace (via `insightface`) embedding is extracted and matched against a gallery of known identities.
+2. **Person re-ID branch** — if no reliable face is found, a ResNet50-based embedding (trained with batch-hard triplet loss on Market-1501) matches the person's full-body appearance against the gallery instead.
 
-1. **The Face Branch (Primary)**: YOLOv8n-face detects a face within a person's bounding box. If found with high confidence, an ArcFace embedding (via `insightface`) is extracted and matched against a known gallery of identities.
-2. **The Person Re-ID Branch (Fallback)**: If no reliable face is visible or detectable, the system gracefully falls back to a ResNet50-based full-body appearance embedding (trained with batch-hard triplet loss on Market-1501) to match the person's posture, clothing, and build.
+## Pipeline
 
----
-
-## 📐 System Pipeline Architecture
-
-```text
-Image / Live Stream → YOLOv8n (Person Detection)
-                         │
-                         ├── Per-Person Bounding Box Crop
-                         │       │
-                         │       ├── YOLOv8n-face Detection → Confidence Check
-                         │       │       ├── High Confidence (≥ 0.5) → ArcFace Embedding → Face Gallery Match
-                         │       │       └── Low / No Confidence ↓
-                         │       └── ResNet50 Re-ID Embedding → Appearance Gallery Match
-                         │
-                         └── Final Annotated Output (Name, Similarity Score, Source Branch)
+```
+Image → YOLOv8n (person detection)
+           │
+           ├── per person crop
+           │       │
+           │       ├── YOLOv8n-face detection → confidence check
+           │       │       ├── high confidence → ArcFace embedding → face gallery match
+           │       │       └── low/no confidence ↓
+           │       └── ResNet50 re-ID embedding → re-ID gallery match
+           │
+           └── annotated output (name, similarity score, source branch)
 ```
 
----
+## Models
 
-## 🛠️ Model Components & Stack
-
-| Component | Model Architecture | Training Data / Source | Notes |
+| Component | Model | Training data | Notes |
 |---|---|---|---|
-| **Person Detection** | YOLOv8n | COCO Dataset (Pretrained) | Used out-of-the-box for bounding box extraction |
-| **Face Detection** | YOLOv8n-face | WIDER FACE (Pretrained) | [lindevs/yolov8-face](https://github.com/lindevs/yolov8-face) |
-| **Face Embedding** | ArcFace (`buffalo_l`) | InsightFace Zoo | High-accuracy facial feature vector extraction |
-| **Person Re-ID** | ResNet50 (Custom Head) | Market-1501 | Trained from scratch with batch-hard triplet loss |
+| Person detection | YOLOv8n | COCO (pretrained) | Used as-is, no fine-tuning |
+| Face detection | YOLOv8n-face | WIDER FACE (pretrained) | [lindevs/yolov8-face](https://github.com/lindevs/yolov8-face) |
+| Face embedding | ArcFace (buffalo_l) | — | Via `insightface`, used as-is |
+| Person re-ID embedding | ResNet50 (custom head) | Market-1501 | Trained from scratch here with batch-hard triplet loss |
 
----
+Pretrained weights for person/face detection and face embedding are used directly — the effort here went into the re-ID branch (trained specifically for this project) and the fusion/gallery-matching logic that ties both branches together.
 
-## 📊 Re-ID Training & Optimization Results
+## Re-ID training results
 
-The person re-identification branch was trained in two stages on the **Market-1501** dataset (751 identities, 12,936 training images):
+Trained in two stages on Market-1501 (751 identities, 12,936 training images):
 
-| Training Stage | Rank-1 | Rank-5 | Rank-10 | mAP |
+| Stage | Rank-1 | Rank-5 | Rank-10 | mAP |
 |---|---|---|---|---|
-| Random Triplet Sampling | 39.4% | 63.2% | 73.5% | 22.9% |
-| **+ Batch-Hard Triplet Mining (P=16, K=4)** | **74.4%** | **88.8%** | **92.5%** | **55.3%** |
+| Random triplet sampling | 39.4% | 63.2% | 73.5% | 22.9% |
+| + Batch-hard triplet mining (P=16, K=4) | **74.4%** | **88.8%** | **92.5%** | **55.3%** |
 
-> **Engineering Takeaway:** Implementing batch-hard mining (sampling the hardest positive and negative pairs within each batch) nearly doubled both Rank-1 accuracy and mean Average Precision (mAP), making the fallback branch robust enough for real-world deployment.
+Batch-hard mining — sampling the hardest positive/negative pairs within each batch rather than random triplets — nearly doubled both Rank-1 accuracy and mAP. This is the single biggest lever in re-ID training and is the reason the fallback branch is usable at all.
 
----
+## Weights
 
-## 📦 Model Weights
+Pretrained/trained model weights are hosted on Hugging Face (kept out of this repo due to size):
+**[neural-shubh/disguise-resistant-face-person-id-models](https://huggingface.co/neural-shubh/disguise-resistant-face-person-id-models)**
 
-Pretrained and custom-trained model weights are hosted on Hugging Face:
-🔗 **[neural-shubh/disguise-resistant-face-person-id-models](https://huggingface.co/neural-shubh/disguise-resistant-face-person-id-models)**
+- `reid_embedding_resnet50_hardmined.keras` — TensorFlow re-ID embedding model
+- `yolov8n-face.pt` — pretrained YOLOv8n face detector
 
-- `reid_embedding_resnet50_hardmined.keras` — Custom TensorFlow re-ID embedding model
-- `yolov8n-face.pt` — Pretrained YOLOv8n face detection weights
+## Usage
 
----
-
-## 💻 Installation & Quick Start
-
-### 1. Clone & Install Dependencies
-```bash
-git clone https://github.com/your-username/disguise-resistant-face-person-id.git
-cd disguise-resistant-face-person-id
-pip install -r requirements.txt
-```
-
-### 2. Run the Pipeline
-Explore the complete end-to-end pipeline, model loading routines, and visualization tools inside the Jupyter notebook:
-```bash
-jupyter notebook face_recognition.ipynb
-```
-
-### 3. Programmatic Usage
 ```python
-import cv2
 from src.pipeline import identify_people_with_gallery
 from src.models import IdentityGallery
 
-# Initialize gallery and enroll known identities
 gallery = IdentityGallery()
 gallery.enroll("Alice", cv2.imread("alice_photo.jpg"))
 
-# Run identification on a query image containing disguises/occlusions
-identities, annotated_img = identify_people_with_gallery("test_image.jpg", gallery)
+identities, img = identify_people_with_gallery("test_image.jpg", gallery)
 ```
 
----
+See `face_recognition.ipynb` for the full end-to-end pipeline, including model loading, training code, and visualization.
 
-## ⚠️ Known Limitations & Future Work
+## Known limitations
 
-- **Appearance vs. Identity (Re-ID):** The Re-ID branch matches clothing, posture, and build rather than invariant facial identity. Cross-session testing (changing clothes or camera angles) can degrade similarity scores. Future updates will incorporate spatiotemporal tracking to mitigate clothing dependency.
-- **Hyperparameter Tuning:** Default face branch confidence thresholds (`0.5`) and gallery matching cutoffs are currently baseline estimates and require empirical calibration on validation sets.
-- **Benchmark Performance:** While a 74.4% Rank-1 accuracy on Market-1501 is a strong baseline, state-of-the-art Re-ID backbones achieve higher metrics. Upgrading to stronger architectures (e.g., Vision Transformers or OSNet) is planned.
+- **Re-ID is appearance-sensitive, not identity-invariant.** It matches clothing, build, and posture — not a person's underlying identity the way a human would. Testing showed that comparing enrollment and query photos taken in different sessions (different clothes, framing, or background) drops similarity scores well below the match threshold, even for the same person. A controlled same-session test (same clothes, only the face occlusion changing) is needed to isolate disguise-robustness specifically from appearance drift.
+- **Face branch confidence threshold (0.5) and gallery match thresholds are untuned defaults**, not calibrated against a labeled validation set — expect to adjust for your own use case.
+- **Re-ID Rank-1 (74%) and mAP (55%) are a solid baseline but below published SOTA** (~90%+ Rank-1 on Market-1501 with stronger backbones and longer training).
 
----
+## Datasets
 
-## 📚 Datasets
-- **[WIDER FACE](http://shuoyang1213.me/WIDERFACE/)** — Unconstrained face detection benchmark.
-- **[Market-1501](https://paperswithcode.com/dataset/market-1501)** — Person re-identification dataset.
+- [WIDER FACE](http://shuoyang1213.me/WIDERFACE/) — face detection
+- [Market-1501](https://paperswithcode.com/dataset/market-1501) — person re-identification
 
----
+## Tech stack
 
-## 👨‍💻 Author
-**Shubh Sharma**
-
-*Tech Stack:* `ultralytics` (YOLOv8), `insightface` (ArcFace), TensorFlow / Keras, OpenCV, Google Colab (T4 GPU).
+`ultralytics` (YOLOv8), `insightface` (ArcFace), TensorFlow/Keras (re-ID model), OpenCV, Google Colab (T4 GPU)
