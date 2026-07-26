@@ -7,3 +7,5 @@ keras
 pillow
 jupyter
 notebook
+ultralytics
+insightface
