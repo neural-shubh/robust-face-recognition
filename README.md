@@ -73,6 +73,17 @@ See `face_recognition.ipynb` for the full end-to-end pipeline, including model l
 - **Re-ID is appearance-sensitive, not identity-invariant.** It matches clothing, build, and posture — not a person's underlying identity the way a human would. Testing showed that comparing enrollment and query photos taken in different sessions (different clothes, framing, or background) drops similarity scores well below the match threshold, even for the same person. A controlled same-session test (same clothes, only the face occlusion changing) is needed to isolate disguise-robustness specifically from appearance drift.
 - **Face branch confidence threshold (0.5) and gallery match thresholds are untuned defaults**, not calibrated against a labeled validation set — expect to adjust for your own use case.
 - **Re-ID Rank-1 (74%) and mAP (55%) are a solid baseline but below published SOTA** (~90%+ Rank-1 on Market-1501 with stronger backbones and longer training).
+- **No open-set rejection.** The pipeline always returns the nearest gallery match, even when the true best match is a poor one — it will not currently say "unknown" for someone outside the enrolled gallery (tracked in [#4](https://github.com/neural-shubh/robust-face-recognition/issues/4)).
+- **No adversarial-robustness evaluation.** Neither the ArcFace embedder nor the YOLO detectors have been tested against adversarial perturbations or physical patch-based attacks.
+
+## Responsible use
+
+This pipeline was built for research and portfolio purposes — as a demonstration of disguise-robust identification, not as a deployable surveillance tool. Two things are worth being explicit about:
+
+- **Purpose-built for consented, closed-gallery matching.** The intended use case is matching against a small, deliberately-enrolled gallery (e.g. "does this crop match one of these N known people?"), not open-ended tracking of unconsented individuals across cameras or footage. The two-tier design (face → re-ID fallback) is specifically resistant to the occlusion tricks people use to avoid being identified, which is the whole point for the intended use case, but is also what would make it attractive to repurpose into a persistent "track this person even when they cover their face" tool. Don't use it that way.
+- **Not evaluated for production identification decisions.** The re-ID branch is appearance-sensitive rather than identity-invariant (see Known limitations above), and neither branch has calibrated confidence thresholds or open-set rejection yet. It should not be used as the basis for decisions with real consequences for the people being identified — that requires the calibration, benchmarking, and adversarial-robustness work tracked in the repo's open issues.
+
+If you build on this code, please carry these caveats forward into your own README rather than presenting the numbers here as production-ready.
 
 ## Datasets
 
