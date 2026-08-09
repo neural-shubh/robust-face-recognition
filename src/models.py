@@ -31,11 +31,16 @@ class IdentityGallery:
     in separate galleries — matching only ever compares like with like.
     """
 
-    def __init__(self, face_threshold=0.4, reid_threshold=0.5):
+    def __init__(self, face_threshold=None, reid_threshold=None):
         self.face_gallery = {}   # name -> list of face embeddings
         self.reid_gallery = {}   # name -> list of re-id embeddings
-        self.face_threshold = face_threshold
-        self.reid_threshold = reid_threshold
+        # Defaults now live in src/config.py instead of being hardcoded here,
+        # so they can be re-tuned per deployment without touching this file
+        # (see issue #4). Once src/calibration.py has been run against a
+        # labeled calibration set, update the values in config.py.
+        from .config import FACE_MATCH_THRESHOLD, REID_MATCH_THRESHOLD
+        self.face_threshold = face_threshold if face_threshold is not None else FACE_MATCH_THRESHOLD
+        self.reid_threshold = reid_threshold if reid_threshold is not None else REID_MATCH_THRESHOLD
 
     def enroll(self, name, person_crop_bgr, get_face_embedding_fn, get_reid_embedding_fn):
         """
